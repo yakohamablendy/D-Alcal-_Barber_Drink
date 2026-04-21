@@ -5,7 +5,7 @@ import { ClientView } from "@/components/barber-pro/client-view"
 
 export default function ClientPage() {
   const toastRef = useRef<HTMLDivElement>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const showToast = useCallback((msg: string) => {
     const el = toastRef.current
