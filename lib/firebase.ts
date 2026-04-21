@@ -13,8 +13,19 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializar Firebase (evita inicializar dos veces en Next.js)
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Debug: Verificar que las llaves existen (solo verás esto en la consola del navegador)
+if (typeof window !== "undefined") {
+  if (!firebaseConfig.apiKey) console.warn("⚠️ Firebase API Key is missing!");
+  if (!firebaseConfig.projectId) console.warn("⚠️ Firebase Project ID is missing!");
+}
+
+// Inicializar Firebase
+let app;
+try {
+  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+} catch (e) {
+  console.error("Error inicializando Firebase:", e);
+}
 
 // Exportar servicios
 export const auth = getAuth(app);
