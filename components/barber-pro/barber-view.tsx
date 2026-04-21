@@ -8,10 +8,22 @@ import {
   onSnapshot, 
   orderBy, 
   updateDoc, 
-  doc 
+  doc,
+  addDoc,
+  deleteDoc,
+  setDoc,
+  getDocs
 } from "firebase/firestore"
 
 // ── Types ──
+
+interface Service {
+  id: string
+  name: string
+  price: number
+  duration: number
+  description: string
+}
 
 interface Appointment {
   id: string
@@ -20,10 +32,12 @@ interface Appointment {
   clientEmail: string
   serviceName: string
   price: number
-  status: "pending" | "completed" | "cancelled"
-  date: any // Usamos any para ser resistentes a datos viejos
+  status: "pending" | "attended" | "no-show" | "cancelled"
+  date: string
   time: string
   notes?: string
+  drinkCharge?: number
+  extraHourCharge?: number
   createdAt: any
 }
 
@@ -36,19 +50,9 @@ interface DaySchedule {
   extraEnabled: boolean
 }
 
-type Tab = "citas" | "horario" | "config"
+type Tab = "citas" | "horario" | "servicios" | "finanzas" | "config"
 
 const dayLabels = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-
-const defaultSchedule: Record<string, DaySchedule> = {
-  Lunes:     { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Martes:    { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Miércoles: { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Jueves:    { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Viernes:   { enabled: true,  start: "09:00", end: "19:00", extraEnabled: false, extraStart: "19:00", extraEnd: "21:00" },
-  Sábado:    { enabled: true,  start: "09:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "17:00" },
-  Domingo:   { enabled: false, start: "10:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "16:00" },
-}
 
 const timeOptions: string[] = []
 for (let h = 6; h <= 23; h++) {
@@ -57,246 +61,272 @@ for (let h = 6; h <= 23; h++) {
   }
 }
 
-interface Props {
-  showToast: (msg: string) => void
-}
-
-export function BarberView({ showToast }: Props) {
+export function BarberView({ showToast }: { showToast: (msg: string) => void }) {
   const [tab, setTab] = useState<Tab>("citas")
   const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [schedule, setSchedule] = useState<Record<string, DaySchedule>>(defaultSchedule)
+  const [services, setServices] = useState<Service[]>([])
+  const [schedule, setSchedule] = useState<Record<string, DaySchedule>>({})
+  const [extraHourPlus, setExtraHourPlus] = useState(0)
+  const [logoUrl, setLogoUrl] = useState("")
   const [loading, setLoading] = useState(true)
-  const [isSavingSchedule, setIsSavingSchedule] = useState(false)
-  const [dateTag, setDateTag] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  
+  // Filtros
+  const [filterDay, setFilterDay] = useState<string>("Todos")
 
-  // Configuración de recordatorios
-  const [remindersEnabled, setRemindersEnabled] = useState(true)
-  const [reminderHours, setReminderHours] = useState(2)
-  const [reminderMessage, setReminderMessage] = useState("¡Hola [Cliente]! Te recordamos tu cita en Alcala Barber Drink para el [Fecha] a las [Hora]. ¡Te esperamos! 💈🥃")
-  const [isSavingConfig, setIsSavingConfig] = useState(false)
-
+  // 1. CARGA DE DATOS EN TIEMPO REAL
   useEffect(() => {
-    // Generar fecha solo en cliente para evitar error de hidratación
-    const today = new Date()
-    const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
-    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-    setDateTag(`${dayNames[today.getDay()]} ${today.getDate()} ${monthNames[today.getMonth()]} ${today.getFullYear()}`)
-
-    const q = query(collection(db, "bookings"), orderBy("createdAt", "desc"))
-    const unsubscribeAppts = onSnapshot(q, (snapshot) => {
-      const appts: Appointment[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Appointment))
-      setAppointments(appts)
-    }, (error) => {
-      console.error("Error en snapshot:", error)
+    // Cargar Citas
+    const qAppts = query(collection(db, "bookings"), orderBy("createdAt", "desc"))
+    const unsubAppts = onSnapshot(qAppts, (snap) => {
+      setAppointments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Appointment)))
     })
 
-    const loadData = async () => {
+    // Cargar Servicios
+    const qServs = query(collection(db, "services"))
+    const unsubServs = onSnapshot(qServs, (snap) => {
+      setServices(snap.docs.map(d => ({ id: d.id, ...d.data() } as Service)))
+    })
+
+    // Cargar Configuración (Horario, Logo, Plus)
+    const loadConfig = async () => {
       try {
         const { getDoc, doc: fsDoc } = await import("firebase/firestore")
         const schedSnap = await getDoc(fsDoc(db, "config", "schedule"))
-        if (schedSnap.exists()) setSchedule(schedSnap.data() as Record<string, DaySchedule>)
-        
-        const configSnap = await getDoc(fsDoc(db, "config", "notifications"))
-        if (configSnap.exists()) {
-          const data = configSnap.data()
-          setRemindersEnabled(data.enabled ?? true)
-          setReminderHours(data.hours ?? 2)
-          setReminderMessage(data.message ?? "")
+        if (schedSnap.exists()) {
+          const data = schedSnap.data()
+          setSchedule(data.days || {})
+          setExtraHourPlus(data.extraCharge || 0)
         }
-      } catch (error) {
-        console.error("Error cargando datos:", error)
-      } finally {
+        const brandSnap = await getDoc(fsDoc(db, "config", "branding"))
+        if (brandSnap.exists()) setLogoUrl(brandSnap.data().logoUrl || "")
+        
+        setLoading(false)
+      } catch (e) {
+        console.error("Error cargando config:", e)
         setLoading(false)
       }
     }
 
-    loadData()
-    return () => unsubscribeAppts()
+    loadConfig()
+    return () => { unsubAppts(); unsubServs(); }
   }, [])
 
-  const handleComplete = async (id: string) => {
+  // ── Lógica de Citas ──
+  const handleAttendance = async (id: string, status: "attended" | "no-show") => {
     try {
-      const docRef = doc(db, "bookings", id)
-      await updateDoc(docRef, { status: "completed" })
-      showToast("Cita completada")
-    } catch (error) {
-      console.error("Error al completar cita:", error)
-      showToast("Error al actualizar la cita")
+      await updateDoc(doc(db, "bookings", id), { status })
+      showToast(status === "attended" ? "Asistencia confirmada" : "Marcado como no vino")
+    } catch (e) { showToast("Error al actualizar") }
+  }
+
+  const addDrink = async (id: string, currentDrinkCharge: number = 0) => {
+    const amount = prompt("¿Cuánto costó la bebida?", "100")
+    if (amount) {
+      try {
+        await updateDoc(doc(db, "bookings", id), { drinkCharge: currentDrinkCharge + parseInt(amount) })
+        showToast("Bebida sumada")
+      } catch (e) { showToast("Error") }
     }
   }
 
-  const sendWhatsAppReminder = (appt: Appointment) => {
-    const displayDate = typeof appt.date === 'object' && appt.date !== null ? appt.date.fullLabel : appt.date
-    let msg = reminderMessage
-      .replace("[Cliente]", appt.clientName || "Cliente")
-      .replace("[Fecha]", displayDate || "")
-      .replace("[Hora]", appt.time || "")
-
-    const cleanPhone = (appt.clientPhone || "").replace(/\D/g, "")
-    if (!cleanPhone) return showToast("No hay teléfono válido")
-    const finalPhone = cleanPhone.startsWith("1") ? cleanPhone : `1${cleanPhone}`
-    const url = `https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`
-    window.open(url, "_blank")
+  // ── Lógica de Servicios ──
+  const [newService, setNewService] = useState({ name: "", price: 0, description: "" })
+  const handleAddService = async () => {
+    if (!newService.name || newService.price <= 0) return showToast("Datos incompletos")
+    setIsSaving(true)
+    try {
+      await addDoc(collection(db, "services"), { ...newService, duration: 30 })
+      setNewService({ name: "", price: 0, description: "" })
+      showToast("Servicio añadido")
+    } catch (e) { showToast("Error") }
+    setIsSaving(false)
   }
 
-  const updateDay = (day: string, patch: Partial<DaySchedule>) => {
-    setSchedule((prev) => ({ ...prev, [day]: { ...prev[day], ...patch } }))
+  const deleteService = async (id: string) => {
+    if (confirm("¿Borrar este servicio?")) {
+      await deleteDoc(doc(db, "services", id))
+      showToast("Servicio eliminado")
+    }
   }
 
+  // ── Lógica de Horario y Config ──
   const saveSchedule = async () => {
-    setIsSavingSchedule(true)
+    setIsSaving(true)
     try {
-      const { setDoc, doc: fsDoc } = await import("firebase/firestore")
-      await setDoc(fsDoc(db, "config", "schedule"), schedule)
-      showToast("Horario actualizado")
-    } catch (error) {
-      console.error("Error guardando horario:", error)
-      showToast("Error al guardar")
-    } finally {
-      setIsSavingSchedule(false)
-    }
+      await setDoc(doc(db, "config", "schedule"), { days: schedule, extraCharge: extraHourPlus })
+      showToast("Horario y recargo guardados")
+    } catch (e) { showToast("Error") }
+    setIsSaving(false)
   }
 
-  const saveConfig = async () => {
-    setIsSavingConfig(true)
+  const saveBranding = async () => {
+    setIsSaving(true)
     try {
-      const { setDoc, doc: fsDoc } = await import("firebase/firestore")
-      await setDoc(fsDoc(db, "config", "notifications"), {
-        enabled: remindersEnabled,
-        hours: reminderHours,
-        message: reminderMessage,
-        updatedAt: new Date()
-      })
-      showToast("Configuración guardada")
-    } catch (error) {
-      console.error("Error guardando config:", error)
-      showToast("Error al guardar")
-    } finally {
-      setIsSavingConfig(false)
-    }
+      await setDoc(doc(db, "config", "branding"), { logoUrl })
+      showToast("Logo actualizado")
+    } catch (e) { showToast("Error") }
+    setIsSaving(false)
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "citas", label: "Citas" },
-    { id: "horario", label: "Horario" },
-    { id: "config", label: "Avisos" },
-  ]
+  // ── Filtrado y Reportes ──
+  const filteredAppointments = appointments.filter(a => filterDay === "Todos" || a.date.includes(filterDay))
+  
+  const dailyAttended = appointments.filter(a => a.status === "attended" && a.date.includes("Hoy")) // simplificado
+  const totalDaily = dailyAttended.reduce((sum, a) => sum + (a.price || 0) + (a.drinkCharge || 0) + (a.extraHourCharge || 0), 0)
+
+  if (loading) return <div className="min-h-screen bg-ink flex items-center justify-center text-gold italic">Cargando Alcala...</div>
 
   return (
-    <div className="max-w-[960px] mx-auto px-8 py-14">
-      {/* Top line */}
-      <div className="flex justify-between items-end mb-8 flex-wrap gap-4">
-        <div>
-          <div className="text-[11px] tracking-widest uppercase text-dim mb-3">Panel Admin</div>
-          <h1 className="font-serif text-[clamp(28px,5vw,42px)] text-white">Alcala Barber <em className="italic text-gold">Drink</em></h1>
+    <div className="max-w-[1100px] mx-auto px-8 py-10">
+      {/* Header Admin */}
+      <div className="flex justify-between items-center mb-12">
+        <div className="flex items-center gap-4">
+          {logoUrl ? <img src={logoUrl} alt="Logo" className="w-12 h-12 rounded-full border border-gold/30 object-contain bg-ink-2" /> : <div className="w-12 h-12 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center text-gold italic font-serif">A</div>}
+          <h1 className="font-serif text-3xl text-white">Alcala Barber <em className="italic text-gold">Drink</em></h1>
         </div>
-        {dateTag && (
-          <div className="text-[10px] text-dim font-mono px-3 py-1.5 border border-rule rounded-sm bg-ink-2">
-            {dateTag}
-          </div>
-        )}
+        <div className="flex gap-1 bg-ink-2 p-1 rounded-sm border border-rule">
+          {(["citas", "horario", "servicios", "finanzas", "config"] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-sm transition-all ${tab === t ? "bg-gold text-ink" : "text-dim hover:text-white"}`}>{t}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="flex gap-0 border-b border-rule mb-10">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-5 pb-3 pt-1 text-[13px] border-b-2 transition-all bg-transparent cursor-pointer ${tab === t.id ? "text-white border-b-gold" : "text-dim border-b-transparent hover:text-mid"}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ═══════ TAB: CITAS ═══════ */}
+      {/* 📅 PESTAÑA: CITAS */}
       {tab === "citas" && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-rule rounded-sm overflow-hidden border border-rule mb-14">
-            <div className="bg-ink-2 p-6">
-              <div className="text-[10px] uppercase text-dim mb-2">Citas Pendientes</div>
-              <div className="font-serif text-3xl text-white">{appointments.filter(a => a.status === "pending").length}</div>
-            </div>
-            <div className="bg-ink-2 p-6">
-              <div className="text-[10px] uppercase text-dim mb-2">Total Hoy</div>
-              <div className="font-serif text-3xl text-gold">${appointments.filter(a => a.status === "completed").reduce((sum, a) => sum + (a.price || 0), 0).toLocaleString()}</div>
-            </div>
-            <div className="bg-ink-2 p-6 max-md:col-span-2 text-center md:text-left">
-              <div className="text-[10px] uppercase text-dim mb-2">Status</div>
-              <div className="text-xs text-green font-mono">Sistema en línea</div>
-            </div>
+          <div className="flex gap-2 overflow-x-auto pb-4 mb-6 custom-scrollbar">
+            {["Todos", ...dayLabels].map(day => (
+              <button key={day} onClick={() => setFilterDay(day)} className={`px-4 py-2 rounded-full border text-[11px] whitespace-nowrap ${filterDay === day ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>{day}</button>
+            ))}
           </div>
 
-          {loading ? (
-            <div className="py-20 text-center text-dim italic animate-pulse">Conectando con base de datos...</div>
-          ) : appointments.length === 0 ? (
-            <div className="py-20 text-center border border-dashed border-rule rounded-sm text-dim italic">No hay citas registradas.</div>
-          ) : (
-            <div className="flex flex-col gap-px bg-rule rounded-sm overflow-hidden border border-rule">
-              {appointments.map((appt) => {
-                const displayDate = typeof appt.date === 'object' && appt.date !== null ? appt.date.fullLabel : appt.date
-                return (
-                  <div key={appt.id} className={`grid grid-cols-[60px_1fr_auto] items-center gap-4 p-5 bg-ink-2 ${appt.status === "completed" ? "opacity-30" : ""}`}>
-                    <div className="text-center">
-                      <div className="text-sm font-mono text-gold leading-none">{appt.time?.split(" ")[0] || "--:--"}</div>
-                      <div className="text-[9px] text-dim mt-1">{appt.time?.split(" ")[1] || "PM"}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-bright">{appt.clientName}</div>
-                      <div className="text-[11px] text-dim font-mono">{appt.clientPhone}</div>
-                      <div className="text-[10px] text-dim mt-1 italic">{appt.serviceName} — {displayDate}</div>
-                      {appt.notes && <div className="mt-2 text-[10px] text-gold/60 border-l border-gold/30 pl-2">{appt.notes}</div>}
-                    </div>
-                    <div className="flex gap-2">
-                      {appt.status !== "completed" && remindersEnabled && (
-                        <button onClick={() => sendWhatsAppReminder(appt)} className="p-2 text-gold border border-gold/20 rounded-sm hover:bg-gold/10 transition-all">
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.38 8.38 0 0 1 3.8.9L21 3z"/></svg>
-                        </button>
-                      )}
-                      {appt.status === "completed" ? (
-                        <div className="px-3 py-1.5 text-[10px] text-dim border border-rule rounded-sm">Listo</div>
-                      ) : (
-                        <button onClick={() => handleComplete(appt.id)} className="px-4 py-1.5 text-[10px] bg-white text-ink rounded-sm hover:bg-white/80">Completar</button>
-                      )}
-                    </div>
+          <div className="flex flex-col gap-3">
+            {filteredAppointments.length === 0 && <div className="py-20 text-center border border-dashed border-rule text-dim">No hay citas para mostrar.</div>}
+            {filteredAppointments.map(appt => (
+              <div key={appt.id} className={`bg-ink-2 border border-rule p-5 rounded-sm grid grid-cols-[100px_1fr_auto] gap-6 items-center ${appt.status === "attended" ? "border-green/30" : appt.status === "no-show" ? "opacity-40" : ""}`}>
+                <div className="text-center border-r border-rule pr-6">
+                  <div className="text-xl font-mono text-white leading-none">{appt.time?.split(" ")[0]}</div>
+                  <div className="text-[10px] text-dim mt-1 uppercase">{appt.time?.split(" ")[1]}</div>
+                </div>
+                <div>
+                  <div className="text-base text-bright flex items-center gap-2">
+                    {appt.clientName} 
+                    {appt.extraHourCharge ? <span className="text-[9px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-full">+ EXTRA</span> : null}
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ═══════ TAB: HORARIO ═══════ */}
-      {tab === "horario" && (
-        <div className="bg-ink-2 border border-rule rounded-sm p-6">
-          <p className="text-xs text-dim mb-6">Configura tus días de trabajo.</p>
-          <div className="flex flex-col gap-4">
-            {dayLabels.map(day => (
-              <div key={day} className="flex items-center justify-between py-2 border-b border-rule/50">
-                <span className="text-sm">{day}</span>
-                <button onClick={() => updateDay(day, { enabled: !schedule[day].enabled })} className={`px-3 py-1 rounded-sm text-[10px] ${schedule[day].enabled ? "bg-gold text-ink" : "bg-ink-4 text-dim"}`}>
-                  {schedule[day].enabled ? "Abierto" : "Cerrado"}
-                </button>
+                  <div className="text-xs text-dim font-mono">{appt.clientPhone} · {appt.date}</div>
+                  <div className="text-[11px] text-gold/80 mt-1 italic">{appt.serviceName} (${appt.price}) {appt.drinkCharge ? `+ Bebida ($${appt.drinkCharge})` : ""}</div>
+                  {appt.notes && <div className="mt-2 text-[10px] text-dim bg-ink-3 p-2 rounded">Nota: {appt.notes}</div>}
+                </div>
+                <div className="flex gap-2">
+                  {appt.status === "pending" && (
+                    <>
+                      <button onClick={() => addDrink(appt.id, appt.drinkCharge)} className="p-2 border border-rule text-blue hover:bg-blue/5 rounded-sm">🥃</button>
+                      <button onClick={() => handleAttendance(appt.id, "attended")} className="px-4 py-2 bg-white text-ink text-[10px] uppercase font-bold rounded-sm hover:bg-gold hover:text-white">Asistió</button>
+                      <button onClick={() => handleAttendance(appt.id, "no-show")} className="px-4 py-2 border border-rule text-dim text-[10px] uppercase rounded-sm">No vino</button>
+                    </>
+                  )}
+                  {appt.status !== "pending" && <div className={`text-[10px] uppercase px-3 py-1 rounded-full border ${appt.status === "attended" ? "border-green text-green" : "border-red text-red"}`}>{appt.status === "attended" ? "Completada" : "Ausente"}</div>}
+                </div>
               </div>
             ))}
           </div>
-          <button onClick={saveSchedule} disabled={isSavingSchedule} className="mt-8 w-full py-3 bg-white text-ink rounded-sm text-xs font-medium">
-            {isSavingSchedule ? "Guardando..." : "Guardar Horario"}
-          </button>
+        </>
+      )}
+
+      {/* ✂️ PESTAÑA: SERVICIOS */}
+      {tab === "servicios" && (
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_350px] gap-10">
+          <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden">
+            {services.map(s => (
+              <div key={s.id} className="bg-ink-2 p-6 flex justify-between items-center">
+                <div><div className="text-white font-medium">{s.name}</div><div className="text-xs text-dim">{s.description}</div></div>
+                <div className="flex items-center gap-6">
+                  <div className="text-gold font-mono text-xl">${s.price}</div>
+                  <button onClick={() => deleteService(s.id)} className="text-dim hover:text-red transition-colors">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-ink-2 p-8 border border-rule rounded-sm h-fit">
+            <h3 className="text-sm uppercase tracking-widest text-gold mb-6">Nuevo Servicio</h3>
+            <div className="flex flex-col gap-4">
+              <input type="text" placeholder="Nombre (ej: Corte Fade)" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} className="bg-ink-3 border border-rule p-3 text-sm text-white rounded-sm outline-none focus:border-gold/50" />
+              <input type="number" placeholder="Precio ($)" value={newService.price || ""} onChange={e => setNewService({...newService, price: parseInt(e.target.value)})} className="bg-ink-3 border border-rule p-3 text-sm text-gold rounded-sm outline-none focus:border-gold/50" />
+              <textarea placeholder="Descripción corta" value={newService.description} onChange={e => setNewService({...newService, description: e.target.value})} className="bg-ink-3 border border-rule p-3 text-sm text-white rounded-sm outline-none focus:border-gold/50 min-h-[80px]" />
+              <button onClick={handleAddService} disabled={isSaving} className="mt-4 py-3 bg-gold text-ink text-xs uppercase font-bold rounded-sm hover:bg-white transition-all">{isSaving ? "Guardando..." : "Crear Servicio"}</button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ═══════ TAB: CONFIG ═══════ */}
-      {tab === "config" && (
-        <div className="bg-ink-2 border border-rule rounded-sm p-8">
-          <div className="mb-6">
-            <label className="text-[10px] uppercase text-dim block mb-2">Mensaje WhatsApp</label>
-            <textarea value={reminderMessage} onChange={e => setReminderMessage(e.target.value)} className="w-full bg-ink-3 border border-rule p-4 text-xs text-bright rounded-sm min-h-[100px] outline-none" />
+      {/* 📊 PESTAÑA: FINANZAS */}
+      {tab === "finanzas" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-ink-2 p-10 border border-rule rounded-sm text-center">
+            <div className="text-[11px] uppercase text-dim tracking-widest mb-4">Total Ganado (Mes)</div>
+            <div className="font-serif text-6xl text-gold">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.price || 0) + (a.drinkCharge || 0) + (a.extraHourCharge || 0), 0).toLocaleString()}</div>
+            <div className="mt-6 text-xs text-dim italic">{appointments.filter(a => a.status === "attended").length} servicios cobrados con éxito.</div>
           </div>
-          <button onClick={saveConfig} disabled={isSavingConfig} className="w-full py-3 bg-white text-ink rounded-sm text-xs font-medium">
-            {isSavingConfig ? "Guardando..." : "Guardar Ajustes"}
-          </button>
+          <div className="bg-ink-2 p-10 border border-rule rounded-sm">
+            <h3 className="text-xs uppercase tracking-widest text-white mb-6">Resumen por categoría</h3>
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between border-b border-rule pb-2"><span className="text-dim text-sm">Cortes</span><span className="text-white font-mono">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.price || 0), 0)}</span></div>
+              <div className="flex justify-between border-b border-rule pb-2"><span className="text-dim text-sm">Bebidas (Drinks)</span><span className="text-white font-mono">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.drinkCharge || 0), 0)}</span></div>
+              <div className="flex justify-between border-b border-rule pb-2"><span className="text-dim text-sm">Horas Extra</span><span className="text-white font-mono">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.extraHourCharge || 0), 0)}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚙️ PESTAÑA: HORARIO */}
+      {tab === "horario" && (
+        <div className="max-w-[700px]">
+          <div className="bg-ink-2 border border-rule rounded-sm p-8 mb-6">
+            <h3 className="text-sm uppercase tracking-widest text-gold mb-6">Cargo por Hora Extra</h3>
+            <div className="flex items-center gap-4">
+              <input type="number" value={extraHourPlus} onChange={e => setExtraHourPlus(parseInt(e.target.value))} className="bg-ink-3 border border-rule p-4 text-xl text-gold font-mono rounded-sm w-32 outline-none" />
+              <div className="text-xs text-dim leading-relaxed">Este monto se sumará automáticamente al precio del corte si el cliente elige un horario marcado como "Extra".</div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden mb-8">
+            {dayLabels.map(day => {
+              const d = schedule[day] || { enabled: false, start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "21:00" }
+              const update = (patch: any) => setSchedule({...schedule, [day]: {...d, ...patch}})
+              return (
+                <div key={day} className="bg-ink-2 p-6 flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-4 min-w-[150px]">
+                    <button onClick={() => update({enabled: !d.enabled})} className={`px-3 py-1 rounded-sm text-[9px] uppercase font-bold ${d.enabled ? "bg-gold text-ink" : "bg-ink-4 text-dim"}`}>{d.enabled ? "Abierto" : "Cerrado"}</button>
+                    <span className="text-sm text-white">{day}</span>
+                  </div>
+                  {d.enabled && (
+                    <div className="flex items-center gap-4">
+                      <select value={d.start} onChange={e => update({start: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      <span className="text-dim">-</span>
+                      <select value={d.end} onChange={e => update({end: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      <button onClick={() => update({extraEnabled: !d.extraEnabled})} className={`px-2 py-1 border text-[9px] rounded-sm transition-all ${d.extraEnabled ? "border-gold text-gold bg-gold/10" : "border-rule text-dim"}`}>EXTRA</button>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <button onClick={saveSchedule} disabled={isSaving} className="w-full py-4 bg-white text-ink text-xs uppercase font-black rounded-sm">{isSaving ? "Guardando..." : "Guardar Configuración de Horario"}</button>
+        </div>
+      )}
+
+      {/* 🖼️ PESTAÑA: AJUSTES (CONFIG) */}
+      {tab === "config" && (
+        <div className="max-w-[600px] bg-ink-2 border border-rule p-10 rounded-sm">
+          <h3 className="text-sm uppercase tracking-widest text-gold mb-8">Imagen de Marca</h3>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] text-dim uppercase">URL del Logo de la Barbería</label>
+              <input type="text" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://tusitio.com/logo.png" className="bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none focus:border-gold/50" />
+            </div>
+            {logoUrl && <div className="p-4 border border-dashed border-rule rounded-sm flex items-center justify-center bg-ink-3"><img src={logoUrl} alt="Preview" className="max-h-20 object-contain" /></div>}
+            <button onClick={saveBranding} disabled={isSaving} className="py-4 bg-gold text-ink text-xs uppercase font-bold rounded-sm">{isSaving ? "Actualizar Logo" : "Actualizar Imagen"}</button>
+          </div>
         </div>
       )}
     </div>

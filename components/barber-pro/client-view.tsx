@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react"
 import { db } from "@/lib/firebase"
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where } from "firebase/firestore"
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, onSnapshot } from "firebase/firestore"
 
 interface Service {
+  id: string
   name: string
   price: number
   duration: number
@@ -18,16 +19,6 @@ interface DaySchedule {
   extraStart: string
   extraEnd: string
   extraEnabled: boolean
-}
-
-const defaultSchedule: Record<string, DaySchedule> = {
-  Lunes:     { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Martes:    { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Miércoles: { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Jueves:    { enabled: true,  start: "09:00", end: "18:00", extraEnabled: false, extraStart: "18:00", extraEnd: "20:00" },
-  Viernes:   { enabled: true,  start: "09:00", end: "19:00", extraEnabled: false, extraStart: "19:00", extraEnd: "21:00" },
-  Sábado:    { enabled: true,  start: "09:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "17:00" },
-  Domingo:   { enabled: false, start: "10:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "16:00" },
 }
 
 function getNextDays(count: number, schedule: Record<string, DaySchedule>) {
@@ -58,248 +49,201 @@ function getNextDays(count: number, schedule: Record<string, DaySchedule>) {
 function generateTimeSlots(dayName: string, schedule: Record<string, DaySchedule>, bookedTimes: string[]) {
   const config = schedule[dayName]
   if (!config || !config.enabled) return []
+  const slots: { time: string; label: string; occupied: boolean; isExtra: boolean }[] = []
 
-  const slots: { time: string; label: string; occupied: boolean }[] = []
-
-  const addSlotsRange = (startStr: string, endStr: string) => {
+  const addSlotsRange = (startStr: string, endStr: string, isExtra: boolean) => {
     let [h, m] = startStr.split(":").map(Number)
     const [endH, endM] = endStr.split(":").map(Number)
     const endTotal = endH * 60 + endM
-
     while (h * 60 + m < endTotal) {
       const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
       const ampm = h >= 12 ? "PM" : "AM"
       const h12 = h % 12 || 12
       const label = `${h12}:${String(m).padStart(2, "0")} ${ampm}`
-      
-      // VERIFICACIÓN REAL: ¿Está esta hora ya en la lista de reservas?
       const isOccupied = bookedTimes.includes(label)
-      
-      slots.push({ time: timeStr, label, occupied: isOccupied })
-      
+      slots.push({ time: timeStr, label, occupied: isOccupied, isExtra })
       m += 30
-      if (m >= 60) {
-        h += 1
-        m = 0
-      }
+      if (m >= 60) { h += 1; m = 0; }
     }
   }
 
-  addSlotsRange(config.start, config.end)
-  if (config.extraEnabled) {
-    addSlotsRange(config.extraStart, config.extraEnd)
-  }
-
+  addSlotsRange(config.start, config.end, false)
+  if (config.extraEnabled) addSlotsRange(config.extraStart || config.end, config.extraEnd || "23:00", true)
   return slots
 }
 
-interface Props {
-  showToast: (msg: string) => void
-}
-
-const services: Service[] = [
-  { name: "Corte Clásico", price: 350, duration: 30, description: "Tijera y máquina. Acabado prolijo y definido." },
-  { name: "Corte + Barba", price: 520, duration: 50, description: "Corte completo más perfilado y definición de barba." },
-  { name: "Afeitado Clásico", price: 290, duration: 25, description: "Navaja recta, toalla caliente y bálsamo de piel." },
-  { name: "Corte Fade", price: 420, duration: 40, description: "Low fade, mid fade o high fade. Degradado limpio." },
-  { name: "Tratamiento Capilar", price: 680, duration: 60, description: "Masaje capilar, hidratación profunda y corte de puntas." },
-  { name: "Pack Novio", price: 900, duration: 80, description: "Corte, barba, afeitado y tratamiento facial completo." },
-]
-
-export function ClientView({ showToast }: Props) {
+export function ClientView({ showToast }: { showToast: (msg: string) => void }) {
   const [step, setStep] = useState(1)
+  const [services, setServices] = useState<Service[]>([])
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState<any>(null)
-  const [selectedTime, setSelectedTime] = useState<string | null>(null)
+  const [selectedTime, setSelectedTime] = useState<any>(null)
   const [formData, setFormData] = useState({ name: "", phone: "", email: "", notes: "" })
   const [isComplete, setIsComplete] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [schedule, setSchedule] = useState<Record<string, DaySchedule>>(defaultSchedule)
+  const [schedule, setSchedule] = useState<Record<string, DaySchedule>>({})
+  const [extraCharge, setExtraCharge] = useState(0)
+  const [logoUrl, setLogoUrl] = useState("")
   const [days, setDays] = useState<any[]>([])
   const [bookedTimes, setBookedTimes] = useState<string[]>([])
 
-  // Cargar horario
+  // 1. Cargar Datos
   useEffect(() => {
-    const loadSchedule = async () => {
-      try {
-        const docRef = doc(db, "config", "schedule")
-        const docSnap = await getDoc(docRef)
-        if (docSnap.exists()) {
-          const fetchedSchedule = docSnap.data() as Record<string, DaySchedule>
-          setSchedule(fetchedSchedule)
-          setDays(getNextDays(10, fetchedSchedule))
-        } else {
-          setDays(getNextDays(10, defaultSchedule))
-        }
-      } catch (error) {
-        console.error("Error cargando horario:", error)
-        setDays(getNextDays(10, defaultSchedule))
+    // Servicios en tiempo real
+    const unsubServs = onSnapshot(collection(db, "services"), (snap) => {
+      setServices(snap.docs.map(d => ({ id: d.id, ...d.data() } as Service)))
+    })
+
+    // Configuración
+    const loadConfig = async () => {
+      const schedSnap = await getDoc(doc(db, "config", "schedule"))
+      if (schedSnap.exists()) {
+        const data = schedSnap.data()
+        setSchedule(data.days)
+        setExtraCharge(data.extraCharge || 0)
+        setDays(getNextDays(10, data.days))
       }
+      const brandSnap = await getDoc(doc(db, "config", "branding"))
+      if (brandSnap.exists()) setLogoUrl(brandSnap.data().logoUrl || "")
     }
-    loadSchedule()
+
+    loadConfig()
+    return () => unsubServs()
   }, [])
 
-  // CARGAR OCUPACIÓN REAL: Cuando el cliente elige un día, miramos qué horas están pilladas
+  // 2. Cargar Ocupación
   useEffect(() => {
     if (!selectedDate) return
-
-    const fetchOccupiedSlots = async () => {
-      try {
-        const q = query(
-          collection(db, "bookings"), 
-          where("date", "==", selectedDate.fullLabel),
-          where("status", "!=", "cancelled")
-        )
-        const querySnapshot = await getDocs(q)
-        const times = querySnapshot.docs.map(doc => doc.data().time)
-        setBookedTimes(times)
-      } catch (error) {
-        console.error("Error cargando huecos ocupados:", error)
-      }
+    const fetchOccupied = async () => {
+      const q = query(collection(db, "bookings"), where("date", "==", selectedDate.fullLabel), where("status", "!=", "cancelled"))
+      const snap = await getDocs(q)
+      setBookedTimes(snap.docs.map(d => d.data().time))
     }
-
-    fetchOccupiedSlots()
+    fetchOccupied()
   }, [selectedDate])
 
   const timeSlots = selectedDate ? generateTimeSlots(selectedDate.dayName, schedule, bookedTimes) : []
-  const morningSlots = timeSlots.filter(s => parseInt(s.time.split(":")[0]) < 12)
-  const afternoonSlots = timeSlots.filter(s => parseInt(s.time.split(":")[0]) >= 12)
+  const currentTotal = (selectedService?.price || 0) + (selectedTime?.isExtra ? extraCharge : 0)
 
   const handleConfirm = async () => {
-    if (!formData.name.trim()) return showToast("El nombre es obligatorio")
-    if (!formData.phone.trim()) return showToast("El teléfono es obligatorio")
-    if (!formData.email.trim()) return showToast("El correo electrónico es obligatorio")
-
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.email.trim()) return showToast("Faltan datos")
     setIsLoading(true)
-
     try {
-      // GUARDADO UNIFICADO Y LIMPIO
       await addDoc(collection(db, "bookings"), {
         clientName: formData.name,
         clientPhone: formData.phone,
-        clientEmail: formData.email.trim().toLowerCase(),
+        clientEmail: formData.email.toLowerCase(),
         notes: formData.notes,
         serviceName: selectedService?.name,
         price: selectedService?.price,
-        duration: selectedService?.duration,
-        date: selectedDate.fullLabel, // GUARDAMOS SOLO EL TEXTO (Evita error de objeto)
-        time: selectedTime,
+        extraHourCharge: selectedTime?.isExtra ? extraCharge : 0,
+        date: selectedDate.fullLabel,
+        time: selectedTime?.label,
         status: "pending",
         createdAt: serverTimestamp(),
       })
 
-      // Enviar correo
-      try {
-        await fetch("/api/send-confirmation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: formData.email,
-            name: formData.name,
-            service: selectedService?.name,
-            price: selectedService?.price,
-            date: selectedDate?.fullLabel,
-            time: selectedTime,
-          }),
-        })
-      } catch (e) {}
+      // Correo
+      fetch("/api/send-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          name: formData.name,
+          service: selectedService?.name,
+          price: currentTotal,
+          date: selectedDate?.fullLabel,
+          time: selectedTime?.label,
+        }),
+      }).catch(() => {})
 
       setIsComplete(true)
-      showToast("Reserva confirmada con éxito")
-    } catch (error) {
-      console.error("Error al guardar reserva:", error)
-      showToast("Error al procesar la reserva.")
-    } finally {
-      setIsLoading(false)
-    }
+    } catch (e) { showToast("Error") }
+    setIsLoading(false)
   }
 
-  const resetBooking = () => {
-    setStep(1); setSelectedService(null); setSelectedDate(null); setSelectedTime(null);
-    setFormData({ name: "", phone: "", email: "", notes: "" }); setIsComplete(false);
-  }
-
-  if (isComplete) {
-    return (
-      <div className="max-w-[960px] mx-auto px-8 py-14">
-        <div className="pt-20 pb-10 max-w-[480px]">
-          <div className="w-8 h-0.5 bg-gold mb-8" />
-          <h2 className="font-serif text-[clamp(28px,5vw,42px)] text-white">Reserva<br /><em className="italic text-gold">confirmada.</em></h2>
-          <div className="mt-7 py-5 border-t border-b border-rule text-[13px] text-mid leading-[1.8]">
-            <strong className="text-bright font-normal">{formData.name}</strong><br />
-            {selectedService?.name} — ${selectedService?.price}<br />
-            {selectedDate?.fullLabel} · {selectedTime}
-          </div>
-          <p className="text-sm text-dim mt-5">Te notificaremos por WhatsApp antes de tu cita.</p>
-          <button onClick={resetBooking} className="mt-8 px-6 py-3 rounded-sm border border-rule text-dim text-xs hover:text-bright transition-all">Nueva reserva</button>
-        </div>
+  if (isComplete) return (
+    <div className="max-w-[600px] mx-auto px-8 py-20 text-center">
+      <div className="w-12 h-0.5 bg-gold mx-auto mb-8" />
+      <h2 className="font-serif text-4xl text-white mb-6">Cita <em className="italic text-gold">Confirmada</em></h2>
+      <div className="bg-ink-2 p-6 rounded-sm border border-rule text-sm text-dim leading-loose mb-10">
+        <strong className="text-white">{formData.name}</strong><br />
+        {selectedService?.name} — ${currentTotal}<br />
+        {selectedDate?.fullLabel} a las {selectedTime?.label}
       </div>
-    )
-  }
+      <button onClick={() => window.location.reload()} className="text-gold text-xs uppercase tracking-widest border-b border-gold pb-1">Hacer otra reserva</button>
+    </div>
+  )
 
   return (
     <div className="max-w-[960px] mx-auto px-8 py-14">
-      <div className="mb-7">
-        <div className="text-[11px] tracking-widest uppercase text-dim mb-3">Alcala Barber Drink</div>
-        <h1 className="font-serif text-[clamp(28px,5vw,42px)] text-white">Reserva tu <em className="italic text-gold">cita.</em></h1>
+      {/* Header con Logo */}
+      <div className="flex flex-col items-center mb-14">
+        {logoUrl ? <img src={logoUrl} alt="Logo" className="h-20 mb-6 object-contain" /> : <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center text-gold italic font-serif text-2xl mb-6">A</div>}
+        <div className="text-[10px] tracking-[0.2em] uppercase text-dim mb-2">Alcala Barber Drink</div>
+        <h1 className="font-serif text-4xl text-white text-center">Reserva tu <em className="italic text-gold">experiencia.</em></h1>
       </div>
 
-      <div className="flex items-center mb-13 gap-4">
-        {[1, 2, 3].map(n => (
-          <div key={n} className={`w-7 h-7 rounded-full border flex items-center justify-center text-[10px] ${step >= n ? "border-gold text-gold" : "border-rule text-dim"}`}>{n}</div>
-        ))}
+      <div className="flex justify-center gap-4 mb-12">
+        {[1, 2, 3].map(n => <div key={n} className={`w-8 h-8 rounded-full border flex items-center justify-center text-[10px] transition-all ${step >= n ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>{n}</div>)}
       </div>
 
       {step === 1 && (
-        <div className="flex flex-col gap-px bg-rule rounded-sm overflow-hidden border border-rule">
+        <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden">
           {services.map(s => (
-            <button key={s.name} onClick={() => setSelectedService(s)} className={`flex justify-between p-6 bg-ink-2 text-left transition-colors ${selectedService?.name === s.name ? "bg-ink-3" : ""}`}>
-              <div><div className="text-bright">{s.name}</div><div className="text-xs text-dim">{s.description}</div></div>
-              <div className="text-gold font-mono">${s.price}</div>
+            <button key={s.id} onClick={() => setSelectedService(s)} className={`flex justify-between p-6 bg-ink-2 text-left hover:bg-ink-3 transition-colors ${selectedService?.id === s.id ? "bg-ink-3" : ""}`}>
+              <div><div className="text-white text-base">{s.name}</div><div className="text-xs text-dim mt-1 font-light">{s.description}</div></div>
+              <div className="text-gold font-mono text-lg">${s.price}</div>
             </button>
           ))}
-          <div className="p-6 bg-ink border-t border-rule flex justify-end">
-            <button disabled={!selectedService} onClick={() => setStep(2)} className="px-6 py-3 bg-white text-ink rounded-sm disabled:opacity-20 transition-all">Continuar</button>
+          {services.length === 0 && <div className="p-20 text-center bg-ink-2 text-dim italic">No hay servicios disponibles.</div>}
+          <div className="p-6 bg-ink flex justify-end border-t border-rule">
+            <button disabled={!selectedService} onClick={() => setStep(2)} className="px-8 py-3 bg-white text-ink text-xs uppercase font-bold rounded-sm disabled:opacity-20">Elegir Horario</button>
           </div>
         </div>
       )}
 
       {step === 2 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="flex flex-col gap-px bg-rule rounded-sm overflow-hidden border border-rule max-h-[400px] overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden h-fit">
             {days.map(d => (
-              <button key={d.sub} onClick={() => {setSelectedDate(d); setSelectedTime(null)}} className={`p-4 bg-ink-2 text-left flex justify-between ${selectedDate?.sub === d.sub ? "bg-ink-3" : ""}`}>
-                <span className="text-bright">{d.label}</span><span className="text-xs text-dim">{d.sub}</span>
+              <button key={d.sub} onClick={() => {setSelectedDate(d); setSelectedTime(null)}} className={`p-4 bg-ink-2 text-left flex justify-between items-center ${selectedDate?.sub === d.sub ? "bg-ink-3" : ""}`}>
+                <span className="text-white text-sm">{d.label}</span><span className="text-[10px] text-dim font-mono">{d.sub}</span>
               </button>
             ))}
           </div>
-          <div className="flex flex-col gap-4">
+          <div>
             <div className="grid grid-cols-3 gap-2">
               {timeSlots.map(s => (
-                <button key={s.time} disabled={s.occupied} onClick={() => setSelectedTime(s.label)} className={`p-3 text-xs font-mono rounded-sm border ${s.occupied ? "opacity-20 line-through" : selectedTime === s.label ? "border-gold text-gold bg-gold/10" : "border-rule text-dim"}`}>
-                  {s.time}
+                <button key={s.time} disabled={s.occupied} onClick={() => setSelectedTime(s)} className={`p-3 text-[11px] font-mono rounded-sm border transition-all ${s.occupied ? "opacity-10 line-through" : selectedTime?.time === s.time ? "border-gold text-gold bg-gold/10" : "border-rule text-dim hover:border-rule-2"}`}>
+                  {s.time} {s.isExtra ? "★" : ""}
                 </button>
               ))}
             </div>
-            <div className="flex justify-between mt-4">
-              <button onClick={() => setStep(1)} className="text-dim text-xs">Volver</button>
-              <button disabled={!selectedTime} onClick={() => setStep(3)} className="px-6 py-3 bg-white text-ink rounded-sm disabled:opacity-20">Continuar</button>
+            {selectedTime?.isExtra && <div className="mt-4 text-[10px] text-gold italic">★ Este horario tiene un recargo de ${extraCharge}</div>}
+            <div className="flex justify-between items-center mt-10">
+              <button onClick={() => setStep(1)} className="text-dim text-[10px] uppercase tracking-widest">Volver</button>
+              <button disabled={!selectedTime} onClick={() => setStep(3)} className="px-8 py-3 bg-white text-ink text-xs uppercase font-bold rounded-sm disabled:opacity-20">Siguiente</button>
             </div>
           </div>
         </div>
       )}
 
       {step === 3 && (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="Nombre completo *" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-bright outline-none focus:border-gold/50" />
-            <input type="tel" placeholder="Teléfono *" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-bright outline-none focus:border-gold/50" />
-            <input type="email" placeholder="Correo electrónico *" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-bright outline-none focus:border-gold/50" />
-            <input type="text" placeholder="Notas (opcional)" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-bright outline-none focus:border-gold/50" />
+        <div className="max-w-[600px] mx-auto">
+          <div className="bg-ink-2 border border-rule p-6 rounded-sm mb-8 flex justify-between items-center">
+            <div className="text-left"><div className="text-[9px] uppercase text-dim mb-1">Total a pagar</div><div className="text-2xl text-gold font-serif">${currentTotal}</div></div>
+            <div className="text-right text-[11px] text-dim">{selectedService?.name}<br/>{selectedDate?.fullLabel} a las {selectedTime?.label}</div>
           </div>
-          <div className="flex justify-between items-center">
-            <button onClick={() => setStep(2)} className="text-dim text-xs">Volver</button>
-            <button disabled={isLoading} onClick={handleConfirm} className="px-8 py-3 bg-white text-ink rounded-sm hover:bg-gold hover:text-white transition-all">{isLoading ? "Procesando..." : "Confirmar Cita"}</button>
+          <div className="flex flex-col gap-4">
+            <input type="text" placeholder="Nombre completo *" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-white outline-none focus:border-gold/50" />
+            <input type="tel" placeholder="Teléfono *" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-white outline-none focus:border-gold/50" />
+            <input type="email" placeholder="Correo electrónico *" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-white outline-none focus:border-gold/50" />
+            <textarea placeholder="Notas u observaciones" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="bg-ink-2 border border-rule p-4 rounded-sm text-white outline-none focus:border-gold/50 min-h-[100px]" />
+            <div className="flex justify-between items-center mt-6">
+              <button onClick={() => setStep(2)} className="text-dim text-[10px] uppercase tracking-widest">Volver</button>
+              <button disabled={isLoading} onClick={handleConfirm} className="px-10 py-4 bg-white text-ink text-xs uppercase font-black rounded-sm hover:bg-gold hover:text-white transition-all">{isLoading ? "Procesando..." : "Confirmar Cita"}</button>
+            </div>
           </div>
         </div>
       )}
