@@ -32,7 +32,7 @@ interface Appointment {
   serviceName: string
   price: number
   status: "pending" | "attended" | "no-show" | "cancelled"
-  date: any // Puede ser string o objeto {fullLabel, ...}
+  date: any 
   time: string
   notes?: string
   drinkCharge?: number
@@ -70,7 +70,6 @@ const defaultSchedule: Record<string, DaySchedule> = {
   Domingo:   { enabled: false, start: "10:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "16:00" },
 }
 
-// Función auxiliar para obtener la fecha como texto sin romper nada
 const getSafeDateString = (date: any): string => {
   if (!date) return "";
   if (typeof date === 'string') return date;
@@ -128,7 +127,6 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
     return () => { unsubAppts(); unsubServs(); }
   }, [])
 
-  // ── Lógica ──
   const handleAttendance = async (id: string, status: "attended" | "no-show") => {
     try {
       await updateDoc(doc(db, "bookings", id), { status })
@@ -166,13 +164,12 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
     const dayName = dNames[today.getDay()]
     const dSched = schedule[dayName]
     if (!dSched?.enabled) return alert("Cerrado hoy")
-    
     const todayAppts = appointments.filter(a => getSafeDateString(a.date).includes("Hoy") || getSafeDateString(a.date).includes(dayName))
     let report = `💈 *AGENDA: ALCALA BARBER DRINK* 🥃\n📅 ${dateTag}\n\n`
     const [hS, mS] = dSched.start.split(":").map(Number)
     const [hE, mE] = dSched.end.split(":").map(Number)
     let curH = hS, curM = mS
-    while (curH * 60 + curM < curH * 60 + mE) {
+    while (curH * 60 + curM < hE * 60 + mE) {
       const tStr = `${String(curH % 12 || 12).padStart(2, "0")}:${String(curM).padStart(2, "0")} ${curH >= 12 ? 'PM' : 'AM'}`
       const isOcc = todayAppts.some(a => a.time === tStr && a.status !== "cancelled")
       report += `${isOcc ? "❌" : "🟢"} ${tStr} ${isOcc ? "-(Ocupado)-" : "*DISPONIBLE*"}\n`
@@ -207,55 +204,55 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
   if (loading) return <div className="min-h-screen bg-ink flex items-center justify-center text-gold italic">Cargando Alcala...</div>
 
   return (
-    <div className="max-w-[1100px] mx-auto px-8 py-10">
-      <div className="flex justify-between items-center mb-12 flex-wrap gap-6">
-        <div className="flex items-center gap-4">
-          {logoUrl ? <img src={logoUrl} alt="Logo" className="w-14 h-14 rounded-full object-contain border border-gold/30 bg-ink-2" /> : <div className="w-14 h-14 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center text-gold font-serif text-2xl">A</div>}
-          <h1 className="font-serif text-3xl text-white">Alcala Admin</h1>
+    <div className="max-w-[1100px] mx-auto px-4 sm:px-8 py-6 sm:py-10">
+      <div className="flex justify-between items-center mb-8 sm:mb-12 flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          {logoUrl ? <img src={logoUrl} alt="Logo" className="w-10 h-10 sm:w-14 sm:h-14 rounded-full object-contain border border-gold/30 bg-ink-2" /> : <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center text-gold font-serif text-xl sm:text-2xl">A</div>}
+          <h1 className="font-serif text-2xl sm:text-3xl text-white">Admin</h1>
         </div>
-        <div className="flex gap-1 bg-ink-2 p-1 rounded-sm border border-rule">
+        <div className="flex gap-1 bg-ink-2 p-1 rounded-sm border border-rule overflow-x-auto max-w-full">
           {(["citas", "horario", "servicios", "finanzas", "config"] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 text-[10px] uppercase tracking-widest rounded-sm transition-all ${tab === t ? "bg-gold text-ink" : "text-dim hover:text-white"}`}>{t}</button>
+            <button key={t} onClick={() => setTab(t)} className={`px-3 sm:px-4 py-2 text-[9px] sm:text-[10px] uppercase tracking-widest rounded-sm transition-all whitespace-nowrap ${tab === t ? "bg-gold text-ink" : "text-dim hover:text-white"}`}>{t}</button>
           ))}
         </div>
       </div>
 
       {tab === "citas" && (
         <>
-          <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
-            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar w-full sm:w-auto">
               {["Todos", ...dayLabels].map(day => (
-                <button key={day} onClick={() => setFilterDay(day)} className={`px-4 py-2 rounded-full border text-[11px] whitespace-nowrap ${filterDay === day ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>{day}</button>
+                <button key={day} onClick={() => setFilterDay(day)} className={`px-4 py-2 rounded-full border text-[10px] sm:text-[11px] whitespace-nowrap ${filterDay === day ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>{day}</button>
               ))}
             </div>
-            <button onClick={generateDayReport} className="px-5 py-2.5 bg-green/10 text-green border border-green/20 rounded-full text-[10px] uppercase font-bold hover:bg-green hover:text-ink transition-all">Estado WhatsApp 📱</button>
+            <button onClick={generateDayReport} className="w-full sm:w-auto px-5 py-3 bg-green/10 text-green border border-green/20 rounded-full text-[10px] uppercase font-bold hover:bg-green hover:text-ink transition-all">Estado WhatsApp 📱</button>
           </div>
           <div className="flex flex-col gap-3">
-            {filteredAppointments.length === 0 && <div className="py-20 text-center border border-dashed border-rule text-dim rounded-sm italic">No hay citas registradas.</div>}
+            {filteredAppointments.length === 0 && <div className="py-20 text-center border border-dashed border-rule text-dim rounded-sm italic text-sm">No hay citas registradas.</div>}
             {filteredAppointments.map(appt => {
               const dStr = getSafeDateString(appt.date)
               return (
-                <div key={appt.id} className={`bg-ink-2 border border-rule p-5 rounded-sm grid grid-cols-[80px_1fr_auto] gap-6 items-center ${appt.status === "attended" ? "border-green/20" : appt.status === "no-show" ? "opacity-30" : ""}`}>
-                  <div className="text-center border-r border-rule pr-6">
-                    <div className="text-lg font-mono text-white leading-none">{appt.time?.split(" ")[0]}</div>
-                    <div className="text-[9px] text-dim mt-1 uppercase">{appt.time?.split(" ")[1]}</div>
+                <div key={appt.id} className={`bg-ink-2 border border-rule p-4 sm:p-5 rounded-sm flex flex-col sm:grid sm:grid-cols-[80px_1fr_auto] gap-4 sm:gap-6 items-start sm:items-center ${appt.status === "attended" ? "border-green/20" : appt.status === "no-show" ? "opacity-30" : ""}`}>
+                  <div className="flex sm:flex-col items-center sm:text-center border-b sm:border-b-0 sm:border-r border-rule pb-2 sm:pb-0 sm:pr-6 w-full sm:w-auto gap-3 sm:gap-0">
+                    <div className="text-lg sm:text-xl font-mono text-white leading-none">{appt.time?.split(" ")[0]}</div>
+                    <div className="text-[9px] text-dim sm:mt-1 uppercase">{appt.time?.split(" ")[1]}</div>
                   </div>
-                  <div>
-                    <div className="text-base text-bright flex items-center gap-2">{appt.clientName} {(appt.extraHourCharge ?? 0) > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}</div>
-                    <div className="text-xs text-dim font-mono">{appt.clientPhone} · {dStr}</div>
+                  <div className="w-full">
+                    <div className="text-base text-bright flex items-center gap-2 flex-wrap">{appt.clientName} {(appt.extraHourCharge ?? 0) > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}</div>
+                    <div className="text-xs text-dim font-mono mt-1">{appt.clientPhone} · {dStr}</div>
                     <div className="text-[10px] text-gold/80 mt-1 italic">{appt.serviceName} (${appt.price}) {appt.drinkCharge ? `+ Drink ($${appt.drinkCharge})` : ""}</div>
                     {appt.notes && <div className="mt-2 text-[10px] text-dim bg-ink-3 p-2 rounded italic">"{appt.notes}"</div>}
                   </div>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center w-full sm:w-auto justify-end sm:justify-start pt-3 sm:pt-0 border-t sm:border-t-0 border-rule/30">
                     {appt.status === "pending" ? (
                       <>
-                        <button onClick={() => sendWhatsAppReminder(appt)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🔔</button>
-                        <button onClick={() => addDrink(appt.id, appt.drinkCharge)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🥃</button>
-                        <button onClick={() => handleAttendance(appt.id, "attended")} className="px-4 py-2 bg-white text-ink text-[10px] uppercase font-bold rounded-sm">Vino</button>
-                        <button onClick={() => handleAttendance(appt.id, "no-show")} className="px-4 py-2 border border-rule text-dim text-[10px] uppercase rounded-sm">No vino</button>
+                        <button onClick={() => sendWhatsAppReminder(appt)} className="p-3 sm:p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🔔</button>
+                        <button onClick={() => addDrink(appt.id, appt.drinkCharge)} className="p-3 sm:p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🥃</button>
+                        <button onClick={() => handleAttendance(appt.id, "attended")} className="flex-1 sm:flex-none px-4 py-3 sm:py-2 bg-white text-ink text-[10px] uppercase font-bold rounded-sm">Vino</button>
+                        <button onClick={() => handleAttendance(appt.id, "no-show")} className="px-4 py-3 sm:py-2 border border-rule text-dim text-[10px] uppercase rounded-sm">No vino</button>
                       </>
                     ) : (
-                      <div className={`text-[9px] uppercase px-3 py-1 rounded-sm border ${appt.status === "attended" ? "border-green text-green" : "border-red text-red"}`}>{appt.status === "attended" ? "Completada" : "Ausente"}</div>
+                      <div className={`w-full sm:w-auto text-center text-[9px] uppercase px-3 py-2 rounded-sm border ${appt.status === "attended" ? "border-green text-green" : "border-red text-red"}`}>{appt.status === "attended" ? "Completada" : "Ausente"}</div>
                     )}
                   </div>
                 </div>
@@ -266,35 +263,35 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
       )}
 
       {tab === "horario" && (
-        <div className="max-w-[850px]">
-          <div className="bg-ink-2 border border-rule rounded-sm p-8 mb-6 flex justify-between items-center">
+        <div className="max-w-full">
+          <div className="bg-ink-2 border border-rule rounded-sm p-6 sm:p-8 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div><h3 className="text-xs uppercase tracking-widest text-gold mb-1">Precio Hora Extra</h3><p className="text-[10px] text-dim">Monto adicional por horarios especiales.</p></div>
-            <input type="number" value={extraHourPlus} onChange={e => setExtraHourPlus(parseInt(e.target.value))} className="bg-ink-3 border border-rule p-3 text-xl text-gold font-mono rounded-sm w-32 text-right" />
+            <input type="number" value={extraHourPlus} onChange={e => setExtraHourPlus(parseInt(e.target.value))} className="bg-ink-3 border border-rule p-3 text-xl text-gold font-mono rounded-sm w-full sm:w-32 text-right" />
           </div>
           <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden mb-8">
             {dayLabels.map(day => {
               const d = schedule[day] || defaultSchedule[day]
               const update = (patch: any) => setSchedule({...schedule, [day]: {...d, ...patch}})
               return (
-                <div key={day} className="bg-ink-2 p-6 flex items-center justify-between flex-wrap gap-4 border-b border-rule/30">
-                  <div className="flex items-center gap-4 min-w-[140px]">
-                    <button onClick={() => update({enabled: !d.enabled})} className={`px-3 py-1 rounded-sm text-[9px] uppercase font-bold ${d.enabled ? "bg-gold text-ink" : "bg-ink-4 text-dim"}`}>{d.enabled ? "Abierto" : "Cerrado"}</button>
-                    <span className="text-sm text-white">{day}</span>
+                <div key={day} className="bg-ink-2 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-rule/30">
+                  <div className="flex items-center justify-between sm:justify-start gap-4 min-w-[140px]">
+                    <span className="text-sm text-white font-medium">{day}</span>
+                    <button onClick={() => update({enabled: !d.enabled})} className={`px-3 py-1.5 rounded-sm text-[9px] uppercase font-bold transition-all ${d.enabled ? "bg-gold text-ink" : "bg-ink-4 text-dim"}`}>{d.enabled ? "Abierto" : "Cerrado"}</button>
                   </div>
                   {d.enabled && (
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-dim uppercase">Normal:</span>
-                        <select value={d.start} onChange={e => update({start: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                        <select value={d.end} onChange={e => update({end: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <select value={d.start} onChange={e => update({start: e.target.value})} className="flex-1 sm:flex-none bg-ink-3 border border-rule p-2.5 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <span className="text-dim">a</span>
+                        <select value={d.end} onChange={e => update({end: e.target.value})} className="flex-1 sm:flex-none bg-ink-3 border border-rule p-2.5 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
                       </div>
-                      <div className="flex items-center gap-2 border-l border-rule pl-6">
-                        <button onClick={() => update({extraEnabled: !d.extraEnabled})} className={`px-2 py-1 border text-[9px] rounded-sm font-bold ${d.extraEnabled ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>EXTRA</button>
+                      <div className="flex items-center gap-2 w-full sm:w-auto sm:border-l sm:border-rule sm:pl-6">
+                        <button onClick={() => update({extraEnabled: !d.extraEnabled})} className={`px-3 py-2 border text-[9px] rounded-sm font-bold ${d.extraEnabled ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>EXTRA</button>
                         {d.extraEnabled && (
-                          <>
-                            <select value={d.extraStart} onChange={e => update({extraStart: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                            <select value={d.extraEnd} onChange={e => update({extraEnd: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                          </>
+                          <div className="flex items-center gap-2 flex-1 sm:flex-none">
+                            <select value={d.extraStart} onChange={e => update({extraStart: e.target.value})} className="flex-1 sm:flex-none bg-ink-3 border border-gold/30 p-2.5 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                            <select value={d.extraEnd} onChange={e => update({extraEnd: e.target.value})} className="flex-1 sm:flex-none bg-ink-3 border border-gold/30 p-2.5 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -303,44 +300,45 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
               )
             })}
           </div>
-          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-4 bg-white text-ink text-[11px] uppercase font-black rounded-sm tracking-widest">{isSaving ? "Guardando..." : "Guardar Horario"}</button>
+          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-5 bg-white text-ink text-[11px] uppercase font-black rounded-sm tracking-widest shadow-xl">Guardar Cambios</button>
         </div>
       )}
 
       {tab === "servicios" && (
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_350px] gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_350px] gap-8 sm:gap-10">
           <div className="flex flex-col gap-px bg-rule border border-rule rounded-sm overflow-hidden">
             {services.map(s => (
-              <div key={s.id} className="bg-ink-2 p-7 flex justify-between items-center border-b border-rule/30">
-                <div><div className="text-white text-base font-medium">{s.name}</div><div className="text-[11px] text-dim mt-1">{s.description}</div></div>
-                <div className="flex items-center gap-8">
-                  <div className="text-gold font-mono text-xl">${s.price}</div>
-                  <button onClick={() => deleteService(s.id)} className="text-dim hover:text-red transition-all">✕</button>
+              <div key={s.id} className="bg-ink-2 p-5 sm:p-7 flex justify-between items-center border-b border-rule/30">
+                <div><div className="text-white text-sm sm:text-base font-medium">{s.name}</div><div className="text-[10px] sm:text-[11px] text-dim mt-1">{s.description}</div></div>
+                <div className="flex items-center gap-4 sm:gap-8">
+                  <div className="text-gold font-mono text-lg sm:text-xl">${s.price}</div>
+                  <button onClick={() => deleteService(s.id)} className="p-2 text-dim hover:text-red transition-all text-lg">✕</button>
                 </div>
               </div>
             ))}
+            {services.length === 0 && <div className="p-10 text-center bg-ink-2 text-dim italic text-sm">No hay servicios.</div>}
           </div>
-          <div className="bg-ink-2 p-8 border border-rule rounded-sm h-fit">
-            <h3 className="text-xs uppercase tracking-widest text-gold mb-8 text-center">Nuevo Servicio</h3>
+          <div className="bg-ink-2 p-6 sm:p-8 border border-rule rounded-sm h-fit shadow-xl">
+            <h3 className="text-xs uppercase tracking-widest text-gold mb-6 text-center">Nuevo Servicio</h3>
             <div className="space-y-4">
               <input type="text" placeholder="Nombre" value={newService.name} onChange={e => setNewService({...newService, name: e.target.value})} className="w-full bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none" />
               <input type="number" placeholder="Precio ($)" value={newService.price || ""} onChange={e => setNewService({...newService, price: parseInt(e.target.value)})} className="w-full bg-ink-3 border border-rule p-4 text-sm text-gold font-mono rounded-sm outline-none" />
               <textarea placeholder="Descripción" value={newService.description} onChange={e => setNewService({...newService, description: e.target.value})} className="w-full bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none min-h-[100px]" />
-              <button onClick={handleAddService} disabled={isSaving} className="w-full py-4 bg-gold text-ink text-[10px] uppercase font-black rounded-sm hover:bg-white transition-all">Crear Servicio</button>
+              <button onClick={handleAddService} disabled={isSaving} className="w-full py-4 bg-gold text-ink text-[10px] uppercase font-black rounded-sm hover:bg-white transition-all shadow-lg">Crear Servicio</button>
             </div>
           </div>
         </div>
       )}
 
       {tab === "finanzas" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-ink-2 p-10 border border-rule rounded-sm text-center shadow-2xl relative overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+          <div className="bg-ink-2 p-8 sm:p-10 border border-rule rounded-sm text-center shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gold" />
-            <div className="text-[11px] uppercase text-dim tracking-[0.3em] mb-6">Ganancia Total</div>
-            <div className="font-serif text-7xl text-gold tracking-tighter mb-4">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.price || 0) + (a.drinkCharge || 0) + (a.extraHourCharge || 0), 0).toLocaleString()}</div>
-            <div className="text-xs text-dim italic">{appointments.filter(a => a.status === "attended").length} servicios finalizados.</div>
+            <div className="text-[10px] uppercase text-dim tracking-[0.3em] mb-4 sm:mb-6">Ganancia Total</div>
+            <div className="font-serif text-5xl sm:text-7xl text-gold tracking-tighter mb-4">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.price || 0) + (a.drinkCharge || 0) + (a.extraHourCharge || 0), 0).toLocaleString()}</div>
+            <div className="text-[10px] text-dim italic">Contabilizando {appointments.filter(a => a.status === "attended").length} servicios finalizados.</div>
           </div>
-          <div className="bg-ink-2 p-10 border border-rule rounded-sm space-y-6">
+          <div className="bg-ink-2 p-8 sm:p-10 border border-rule rounded-sm space-y-6">
             <h3 className="text-xs uppercase tracking-widest text-white border-b border-rule pb-4">Detalle</h3>
             <div className="flex justify-between items-center"><span className="text-dim text-sm">Cortes</span><span className="text-white font-mono text-lg">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.price || 0), 0).toLocaleString()}</span></div>
             <div className="flex justify-between items-center"><span className="text-dim text-sm">Drinks</span><span className="text-white font-mono text-lg">${appointments.filter(a => a.status === "attended").reduce((sum, a) => sum + (a.drinkCharge || 0), 0).toLocaleString()}</span></div>
@@ -350,17 +348,24 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
       )}
 
       {tab === "config" && (
-        <div className="max-w-[700px] bg-ink-2 border border-rule p-10 rounded-sm space-y-10">
+        <div className="max-w-full sm:max-w-[700px] bg-ink-2 border border-rule p-6 sm:p-10 rounded-sm space-y-10">
           <div className="space-y-6">
             <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Logo</h3>
-            <input type="text" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="URL de tu logo" className="w-full bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none" />
-            {logoUrl && <div className="p-8 border border-dashed border-rule rounded-sm flex items-center justify-center bg-ink-3"><img src={logoUrl} alt="Logo" className="max-h-24 object-contain" /></div>}
+            <div className="flex flex-col gap-2">
+              <label className="text-[9px] text-dim uppercase">URL de tu logo</label>
+              <input type="text" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="Ej: https://imgur.com/logo.png" className="w-full bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none" />
+            </div>
+            {logoUrl && <div className="p-6 sm:p-8 border border-dashed border-rule rounded-sm flex items-center justify-center bg-ink-3"><img src={logoUrl} alt="Logo" className="max-h-20 sm:max-h-24 object-contain" /></div>}
           </div>
           <div className="space-y-6">
-            <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Avisos</h3>
-            <textarea value={reminderMessage} onChange={e => setReminderMessage(e.target.value)} className="w-full bg-ink-3 border border-rule p-5 text-xs text-bright rounded-sm min-h-[120px] outline-none" />
+            <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Avisos WhatsApp</h3>
+            <div className="flex flex-col gap-2">
+              <label className="text-[9px] text-dim uppercase">Mensaje de recordatorio</label>
+              <textarea value={reminderMessage} onChange={e => setReminderMessage(e.target.value)} className="w-full bg-ink-3 border border-rule p-4 sm:p-5 text-xs sm:text-sm text-bright rounded-sm min-h-[120px] outline-none" />
+              <div className="text-[8px] text-dim font-mono">Variables: [Cliente] [Fecha] [Hora]</div>
+            </div>
           </div>
-          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-5 bg-white text-ink text-[10px] uppercase font-black rounded-sm">Guardar Todo</button>
+          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-5 bg-white text-ink text-[10px] uppercase font-black rounded-sm tracking-widest">Guardar Todo</button>
         </div>
       )}
     </div>
