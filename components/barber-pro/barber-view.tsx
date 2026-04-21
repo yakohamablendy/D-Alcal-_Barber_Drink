@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { db } from "@/lib/firebase"
+import { useState, useEffect, useRef } from "react"
+import { db, storage } from "@/lib/firebase"
 import { 
   collection, 
   query, 
@@ -13,6 +13,7 @@ import {
   deleteDoc,
   setDoc
 } from "firebase/firestore"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 
 // ── Types ──
 
@@ -88,8 +89,11 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
   const [reminderMessage, setReminderMessage] = useState("¡Hola [Cliente]! Te recordamos tu cita en Alcala Barber Drink para el [Fecha] a las [Hora]. ¡Te esperamos! 💈🥃")
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [dateTag, setDateTag] = useState("")
   const [filterDay, setFilterDay] = useState<string>("Todos")
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const today = new Date()
@@ -144,6 +148,25 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
     }
   }
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    setIsUploading(true)
+    try {
+      const storageRef = ref(storage, `branding/logo_${Date.now()}`)
+      await uploadBytes(storageRef, file)
+      const url = await getDownloadURL(storageRef)
+      setLogoUrl(url)
+      showToast("Imagen subida")
+    } catch (error) {
+      console.error("Error subiendo:", error)
+      showToast("Error al subir")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   const deleteService = async (id: string) => {
     if (confirm("¿Borrar servicio?")) {
       try { await deleteDoc(doc(db, "services", id)); showToast("Borrado") } catch (e) { showToast("Error") }
@@ -169,7 +192,7 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
     const [hS, mS] = dSched.start.split(":").map(Number)
     const [hE, mE] = dSched.end.split(":").map(Number)
     let curH = hS, curM = mS
-    while (curH * 60 + curM < hE * 60 + mE) {
+    while (curH * 60 + curM < curH * 60 + mE) {
       const tStr = `${String(curH % 12 || 12).padStart(2, "0")}:${String(curM).padStart(2, "0")} ${curH >= 12 ? 'PM' : 'AM'}`
       const isOcc = todayAppts.some(a => a.time === tStr && a.status !== "cancelled")
       report += `${isOcc ? "❌" : "🟢"} ${tStr} ${isOcc ? "-(Ocupado)-" : "*DISPONIBLE*"}\n`
@@ -349,23 +372,26 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
 
       {tab === "config" && (
         <div className="max-w-full sm:max-w-[700px] bg-ink-2 border border-rule p-6 sm:p-10 rounded-sm space-y-10">
-          <div className="space-y-6">
-            <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Logo</h3>
-            <div className="flex flex-col gap-2">
-              <label className="text-[9px] text-dim uppercase">URL de tu logo</label>
-              <input type="text" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="Ej: https://imgur.com/logo.png" className="w-full bg-ink-3 border border-rule p-4 text-sm text-white rounded-sm outline-none" />
+          <div className="space-y-6 text-center sm:text-left">
+            <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Identidad Visual</h3>
+            <div className="flex flex-col items-center sm:items-start gap-6">
+              <div className="relative">
+                {logoUrl ? <img src={logoUrl} alt="Logo" className="w-32 h-32 rounded-full object-contain bg-ink-3 border border-rule shadow-2xl" /> : <div className="w-32 h-32 rounded-full bg-gold/5 border-2 border-dashed border-gold/30 flex items-center justify-center text-gold italic font-serif text-4xl">A</div>}
+                {isUploading && <div className="absolute inset-0 bg-ink/60 rounded-full flex items-center justify-center text-[10px] text-gold animate-pulse uppercase font-bold">Subiendo...</div>}
+              </div>
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+              <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="px-6 py-3 bg-white text-ink text-[10px] uppercase font-black rounded-sm hover:bg-gold hover:text-white transition-all shadow-lg disabled:opacity-50">{isUploading ? "Cargando..." : "Cambiar Logo"}</button>
             </div>
-            {logoUrl && <div className="p-6 sm:p-8 border border-dashed border-rule rounded-sm flex items-center justify-center bg-ink-3"><img src={logoUrl} alt="Logo" className="max-h-20 sm:max-h-24 object-contain" /></div>}
           </div>
           <div className="space-y-6">
             <h3 className="text-xs uppercase tracking-widest text-gold border-b border-rule pb-4">Avisos WhatsApp</h3>
             <div className="flex flex-col gap-2">
               <label className="text-[9px] text-dim uppercase">Mensaje de recordatorio</label>
               <textarea value={reminderMessage} onChange={e => setReminderMessage(e.target.value)} className="w-full bg-ink-3 border border-rule p-4 sm:p-5 text-xs sm:text-sm text-bright rounded-sm min-h-[120px] outline-none" />
-              <div className="text-[8px] text-dim font-mono">Variables: [Cliente] [Fecha] [Hora]</div>
+              <div className="text-[8px] text-dim font-mono uppercase tracking-tighter">Variables: [Cliente] [Fecha] [Hora]</div>
             </div>
           </div>
-          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-5 bg-white text-ink text-[10px] uppercase font-black rounded-sm tracking-widest">Guardar Todo</button>
+          <button onClick={saveAllConfig} disabled={isSaving} className="w-full py-5 bg-gold text-ink text-[10px] uppercase font-black rounded-sm tracking-widest shadow-xl">Guardar Todo</button>
         </div>
       )}
     </div>
