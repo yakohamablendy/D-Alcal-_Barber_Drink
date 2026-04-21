@@ -231,7 +231,7 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
                   <div>
                     <div className="text-base text-bright flex items-center gap-2">
                       {appt.clientName} 
-                      {appt.extraHourCharge > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}
+                      {(appt.extraHourCharge ?? 0) > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}
                     </div>
                     <div className="text-xs text-dim font-mono">{appt.clientPhone} · {dStr}</div>
                     <div className="text-[10px] text-gold/80 mt-1 italic">{appt.serviceName} (${appt.price}) {appt.drinkCharge ? `+ Drink ($${appt.drinkCharge})` : ""}</div>
