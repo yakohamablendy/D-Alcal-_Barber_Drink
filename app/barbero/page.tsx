@@ -11,7 +11,7 @@ export default function BarberoPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const toastRef = useRef<HTMLDivElement>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
     if (!loading && !user) {
