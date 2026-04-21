@@ -1,6 +1,7 @@
 {
-  "name": "my-project",
-  "version": "0.1.0",
+  "name": "alcala-barber-drink",
+  "version": "1.0.0",
+  "description": "Sistema de gestión para barbería Alcala Barber Drink",
   "private": true,
   "scripts": {
     "dev": "next dev",
