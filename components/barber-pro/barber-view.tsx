@@ -32,7 +32,7 @@ interface Appointment {
   serviceName: string
   price: number
   status: "pending" | "attended" | "no-show" | "cancelled"
-  date: string
+  date: any // Puede ser string o objeto {fullLabel, ...}
   time: string
   notes?: string
   drinkCharge?: number
@@ -70,6 +70,15 @@ const defaultSchedule: Record<string, DaySchedule> = {
   Domingo:   { enabled: false, start: "10:00", end: "14:00", extraEnabled: false, extraStart: "14:00", extraEnd: "16:00" },
 }
 
+// Función auxiliar para obtener la fecha como texto sin romper nada
+const getSafeDateString = (date: any): string => {
+  if (!date) return "";
+  if (typeof date === 'string') return date;
+  if (typeof date === 'object' && date.fullLabel) return date.fullLabel;
+  if (typeof date === 'object' && date.label) return date.label;
+  return "Fecha no válida";
+}
+
 export function BarberView({ showToast }: { showToast: (msg: string) => void }) {
   const [tab, setTab] = useState<Tab>("citas")
   const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -91,11 +100,11 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
 
     const unsubAppts = onSnapshot(query(collection(db, "bookings"), orderBy("createdAt", "desc")), (snap) => {
       setAppointments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Appointment)))
-    })
+    }, (err) => console.error(err))
 
     const unsubServs = onSnapshot(collection(db, "services"), (snap) => {
       setServices(snap.docs.map(d => ({ id: d.id, ...d.data() } as Service)))
-    })
+    }, (err) => console.error(err))
 
     const loadConfig = async () => {
       try {
@@ -144,7 +153,8 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
   }
 
   const sendWhatsAppReminder = (appt: Appointment) => {
-    let msg = reminderMessage.replace("[Cliente]", appt.clientName || "Cliente").replace("[Fecha]", appt.date || "").replace("[Hora]", appt.time || "")
+    const dStr = getSafeDateString(appt.date)
+    let msg = reminderMessage.replace("[Cliente]", appt.clientName || "Cliente").replace("[Fecha]", dStr).replace("[Hora]", appt.time || "")
     const cleanPhone = (appt.clientPhone || "").replace(/\D/g, "")
     const finalPhone = cleanPhone.startsWith("1") ? cleanPhone : `1${cleanPhone}`
     window.open(`https://wa.me/${finalPhone}?text=${encodeURIComponent(msg)}`, "_blank")
@@ -153,12 +163,14 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
   const generateDayReport = () => {
     const today = new Date()
     const dNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"]
-    const daySchedule = schedule[dNames[today.getDay()]]
-    if (!daySchedule?.enabled) return alert("Cerrado hoy")
-    const todayAppts = appointments.filter(a => a.date.includes("Hoy") || a.date.includes(dNames[today.getDay()]))
+    const dayName = dNames[today.getDay()]
+    const dSched = schedule[dayName]
+    if (!dSched?.enabled) return alert("Cerrado hoy")
+    
+    const todayAppts = appointments.filter(a => getSafeDateString(a.date).includes("Hoy") || getSafeDateString(a.date).includes(dayName))
     let report = `💈 *AGENDA: ALCALA BARBER DRINK* 🥃\n📅 ${dateTag}\n\n`
-    const [hS, mS] = daySchedule.start.split(":").map(Number)
-    const [hE, mE] = daySchedule.end.split(":").map(Number)
+    const [hS, mS] = dSched.start.split(":").map(Number)
+    const [hE, mE] = dSched.end.split(":").map(Number)
     let curH = hS, curM = mS
     while (curH * 60 + curM < curH * 60 + mE) {
       const tStr = `${String(curH % 12 || 12).padStart(2, "0")}:${String(curM).padStart(2, "0")} ${curH >= 12 ? 'PM' : 'AM'}`
@@ -187,7 +199,10 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
     setIsSaving(false)
   }
 
-  const filteredAppointments = appointments.filter(a => filterDay === "Todos" || a.date.includes(filterDay))
+  const filteredAppointments = appointments.filter(a => {
+    const dStr = getSafeDateString(a.date);
+    return filterDay === "Todos" || dStr.includes(filterDay);
+  })
 
   if (loading) return <div className="min-h-screen bg-ink flex items-center justify-center text-gold italic">Cargando Alcala...</div>
 
@@ -217,32 +232,35 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
           </div>
           <div className="flex flex-col gap-3">
             {filteredAppointments.length === 0 && <div className="py-20 text-center border border-dashed border-rule text-dim rounded-sm italic">No hay citas registradas.</div>}
-            {filteredAppointments.map(appt => (
-              <div key={appt.id} className={`bg-ink-2 border border-rule p-5 rounded-sm grid grid-cols-[80px_1fr_auto] gap-6 items-center ${appt.status === "attended" ? "border-green/20" : appt.status === "no-show" ? "opacity-30" : ""}`}>
-                <div className="text-center border-r border-rule pr-6">
-                  <div className="text-lg font-mono text-white leading-none">{appt.time?.split(" ")[0]}</div>
-                  <div className="text-[9px] text-dim mt-1 uppercase">{appt.time?.split(" ")[1]}</div>
+            {filteredAppointments.map(appt => {
+              const dStr = getSafeDateString(appt.date)
+              return (
+                <div key={appt.id} className={`bg-ink-2 border border-rule p-5 rounded-sm grid grid-cols-[80px_1fr_auto] gap-6 items-center ${appt.status === "attended" ? "border-green/20" : appt.status === "no-show" ? "opacity-30" : ""}`}>
+                  <div className="text-center border-r border-rule pr-6">
+                    <div className="text-lg font-mono text-white leading-none">{appt.time?.split(" ")[0]}</div>
+                    <div className="text-[9px] text-dim mt-1 uppercase">{appt.time?.split(" ")[1]}</div>
+                  </div>
+                  <div>
+                    <div className="text-base text-bright flex items-center gap-2">{appt.clientName} {(appt.extraHourCharge ?? 0) > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}</div>
+                    <div className="text-xs text-dim font-mono">{appt.clientPhone} · {dStr}</div>
+                    <div className="text-[10px] text-gold/80 mt-1 italic">{appt.serviceName} (${appt.price}) {appt.drinkCharge ? `+ Drink ($${appt.drinkCharge})` : ""}</div>
+                    {appt.notes && <div className="mt-2 text-[10px] text-dim bg-ink-3 p-2 rounded italic">"{appt.notes}"</div>}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    {appt.status === "pending" ? (
+                      <>
+                        <button onClick={() => sendWhatsAppReminder(appt)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🔔</button>
+                        <button onClick={() => addDrink(appt.id, appt.drinkCharge)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🥃</button>
+                        <button onClick={() => handleAttendance(appt.id, "attended")} className="px-4 py-2 bg-white text-ink text-[10px] uppercase font-bold rounded-sm">Vino</button>
+                        <button onClick={() => handleAttendance(appt.id, "no-show")} className="px-4 py-2 border border-rule text-dim text-[10px] uppercase rounded-sm">No vino</button>
+                      </>
+                    ) : (
+                      <div className={`text-[9px] uppercase px-3 py-1 rounded-sm border ${appt.status === "attended" ? "border-green text-green" : "border-red text-red"}`}>{appt.status === "attended" ? "Completada" : "Ausente"}</div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div className="text-base text-bright flex items-center gap-2">{appt.clientName} {(appt.extraHourCharge ?? 0) > 0 && <span className="text-[8px] bg-gold/20 text-gold px-1.5 py-0.5 rounded-sm">★ PLUS</span>}</div>
-                  <div className="text-xs text-dim font-mono">{appt.clientPhone} · {appt.date}</div>
-                  <div className="text-[10px] text-gold/80 mt-1 italic">{appt.serviceName} (${appt.price}) {appt.drinkCharge ? `+ Drink ($${appt.drinkCharge})` : ""}</div>
-                  {appt.notes && <div className="mt-2 text-[10px] text-dim bg-ink-3 p-2 rounded italic">"{appt.notes}"</div>}
-                </div>
-                <div className="flex gap-2 items-center">
-                  {appt.status === "pending" ? (
-                    <>
-                      <button onClick={() => sendWhatsAppReminder(appt)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🔔</button>
-                      <button onClick={() => addDrink(appt.id, appt.drinkCharge)} className="p-2 border border-rule text-gold hover:bg-gold/10 rounded-sm">🥃</button>
-                      <button onClick={() => handleAttendance(appt.id, "attended")} className="px-4 py-2 bg-white text-ink text-[10px] uppercase font-bold rounded-sm">Vino</button>
-                      <button onClick={() => handleAttendance(appt.id, "no-show")} className="px-4 py-2 border border-rule text-dim text-[10px] uppercase rounded-sm">No vino</button>
-                    </>
-                  ) : (
-                    <div className={`text-[9px] uppercase px-3 py-1 rounded-sm border ${appt.status === "attended" ? "border-green text-green" : "border-red text-red"}`}>{appt.status === "attended" ? "Completada" : "Ausente"}</div>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </>
       )}
@@ -265,16 +283,20 @@ export function BarberView({ showToast }: { showToast: (msg: string) => void }) 
                   </div>
                   {d.enabled && (
                     <div className="flex items-center gap-4">
-                      <select value={d.start} onChange={e => update({start: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                      <span className="text-dim">a</span>
-                      <select value={d.end} onChange={e => update({end: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                      <button onClick={() => update({extraEnabled: !d.extraEnabled})} className={`px-2 py-1 border text-[9px] rounded-sm font-bold ${d.extraEnabled ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>EXTRA</button>
-                      {d.extraEnabled && (
-                        <>
-                          <select value={d.extraStart} onChange={e => update({extraStart: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                          <select value={d.extraEnd} onChange={e => update({extraEnd: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
-                        </>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-dim uppercase">Normal:</span>
+                        <select value={d.start} onChange={e => update({start: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                        <select value={d.end} onChange={e => update({end: e.target.value})} className="bg-ink-3 border border-rule p-2 text-xs text-white rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      </div>
+                      <div className="flex items-center gap-2 border-l border-rule pl-6">
+                        <button onClick={() => update({extraEnabled: !d.extraEnabled})} className={`px-2 py-1 border text-[9px] rounded-sm font-bold ${d.extraEnabled ? "border-gold text-gold bg-gold/5" : "border-rule text-dim"}`}>EXTRA</button>
+                        {d.extraEnabled && (
+                          <>
+                            <select value={d.extraStart} onChange={e => update({extraStart: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                            <select value={d.extraEnd} onChange={e => update({extraEnd: e.target.value})} className="bg-ink-3 border border-gold/30 p-2 text-xs text-gold rounded-sm">{timeOptions.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
