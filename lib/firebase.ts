@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getAnalytics, isSupported } from "firebase/analytics";
@@ -13,19 +13,8 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Debug: Verificar que las llaves existen (solo verás esto en la consola del navegador)
-if (typeof window !== "undefined") {
-  if (!firebaseConfig.apiKey) console.warn("⚠️ Firebase API Key is missing!");
-  if (!firebaseConfig.projectId) console.warn("⚠️ Firebase Project ID is missing!");
-}
-
-// Inicializar Firebase
-let app;
-try {
-  app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-} catch (e) {
-  console.error("Error inicializando Firebase:", e);
-}
+// Inicializar Firebase con el tipo correcto para TypeScript
+const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Exportar servicios
 export const auth = getAuth(app);
