@@ -1,0 +1,62 @@
+[
+  {
+    "id": "pwa-core",
+    "name": "PWA & Core",
+    "color": "emerald",
+    "description": "Configuración PWA, service worker, manifest e instalación en móvil"
+  },
+  {
+    "id": "booking-flow",
+    "name": "Flujo de Reservas",
+    "color": "blue",
+    "description": "Sistema completo de reserva de citas del cliente: servicios, fecha/hora, confirmación"
+  },
+  {
+    "id": "barber-panel",
+    "name": "Panel del Barbero",
+    "color": "purple",
+    "description": "Dashboard del barbero: citas, horario, disponibilidad, horas extra, ganancias"
+  },
+  {
+    "id": "admin-saas",
+    "name": "Admin SaaS",
+    "color": "amber",
+    "description": "Panel del propietario del software: métricas globales, barberías, MRR, churn"
+  },
+  {
+    "id": "auth-security",
+    "name": "Auth y Seguridad",
+    "color": "red",
+    "description": "Autenticación, protección de rutas, roles (cliente, barbero, admin)"
+  },
+  {
+    "id": "backend-api",
+    "name": "Backend & API",
+    "color": "cyan",
+    "description": "API REST, base de datos, persistencia de datos reales"
+  },
+  {
+    "id": "notifications",
+    "name": "Notificaciones",
+    "color": "pink",
+    "description": "WhatsApp, push notifications, recordatorios de citas"
+  },
+  {
+    "id": "ux-ui",
+    "name": "Mejoras UX/UI",
+    "color": "orange",
+    "description": "Refinamiento visual, animaciones, responsive, accesibilidad"
+  },
+  {
+    "id": "devops",
+    "name": "DevOps y Deploy",
+    "color": "teal",
+    "description": "CI/CD, hosting, dominio, monitoreo, deploy a producción"
+  },
+  {
+    "id": "docs",
+    "name": "Documentación",
+    "color": "indigo",
+    "description": "Documentación técnica, guías de usuario, API docs"
+  }
+]

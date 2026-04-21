@@ -1,0 +1,9 @@
+[
+  { "id": "1", "text": "Código compila sin errores", "checked": false },
+  { "id": "2", "text": "Criterios de aceptación cumplidos", "checked": false },
+  { "id": "3", "text": "Code review aprobado", "checked": false },
+  { "id": "4", "text": "Sin console.log ni código de debug", "checked": false },
+  { "id": "5", "text": "Responsive (móvil y desktop)", "checked": false },
+  { "id": "6", "text": "Commit con formato estándar", "checked": false },
+  { "id": "7", "text": "PWA funcional (instalable, offline)", "checked": false }
+]

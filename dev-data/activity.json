@@ -1,0 +1,86 @@
+[
+  {
+    "id": "a-1774019375496",
+    "devName": "Michael",
+    "action": "Finalizó sesión (0h 0m)",
+    "timestamp": "2026-03-20T15:09:35.496Z"
+  },
+  {
+    "id": "a-1774019373848",
+    "devName": "Michael",
+    "action": "Inició sesión de desarrollo",
+    "timestamp": "2026-03-20T15:09:33.848Z"
+  },
+  {
+    "id": "a1",
+    "timestamp": "2026-03-20T10:00:00",
+    "dev": "Michael",
+    "action": "Inicio del proyecto BarberPro",
+    "storyId": null,
+    "details": "Setup Next.js 16, React 19, Tailwind CSS 4, shadcn/ui"
+  },
+  {
+    "id": "a2",
+    "timestamp": "2026-03-20T10:30:00",
+    "dev": "Michael",
+    "action": "Implementación del diseño editorial",
+    "storyId": "BP-001",
+    "details": "Paleta ink/gold, tipografía Playfair Display + Geist, nav minimalista, componentes con estilo editorial"
+  },
+  {
+    "id": "a3",
+    "timestamp": "2026-03-20T11:00:00",
+    "dev": "Michael",
+    "action": "Flujo de reserva completo",
+    "storyId": "BP-003",
+    "details": "3 pasos: servicio → fecha/hora → datos → confirmación. Stepper visual, radio indicators, time grid"
+  },
+  {
+    "id": "a4",
+    "timestamp": "2026-03-20T11:30:00",
+    "dev": "Michael",
+    "action": "Configuración PWA",
+    "storyId": "BP-002",
+    "details": "manifest.json, sw.js, iconos PNG 192/512/maskable, apple-touch-icon, meta tags"
+  },
+  {
+    "id": "a5",
+    "timestamp": "2026-03-20T12:00:00",
+    "dev": "Michael",
+    "action": "Rutas separadas por rol",
+    "storyId": "BP-004",
+    "details": "/ → cliente (PWA), /barbero → panel barbero, /admin → panel admin SaaS"
+  },
+  {
+    "id": "a6",
+    "timestamp": "2026-03-20T12:30:00",
+    "dev": "Michael",
+    "action": "Dashboard barbero con métricas y citas",
+    "storyId": "BP-005",
+    "details": "Métricas serif grande, lista de citas, botón completar, toast notifications"
+  },
+  {
+    "id": "a7",
+    "timestamp": "2026-03-20T13:00:00",
+    "dev": "Michael",
+    "action": "Gestión de horario del barbero",
+    "storyId": "BP-006",
+    "details": "Tab horario: toggle por día, selectores hora, horas extra, resumen semanal"
+  },
+  {
+    "id": "a8",
+    "timestamp": "2026-03-20T13:30:00",
+    "dev": "Michael",
+    "action": "Panel Admin SaaS",
+    "storyId": "BP-007",
+    "details": "4 métricas, tabla con búsqueda, plan tags, status pills, MRR"
+  },
+  {
+    "id": "a9",
+    "timestamp": "2026-03-20T14:00:00",
+    "dev": "Michael",
+    "action": "Documentación y estructura ágil",
+    "storyId": "BP-008",
+    "details": "CLAUDE.md, docs/, dev-data/ JSON, sprints, epics, stories, dev portal"
+  }
+]

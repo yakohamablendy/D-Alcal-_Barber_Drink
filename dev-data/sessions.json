@@ -1,0 +1,31 @@
+[
+  {
+    "id": "s-1774019375449",
+    "devId": "michael",
+    "devName": "Michael",
+    "storyId": "N/A",
+    "ai": "Claude",
+    "startedAt": "2026-03-20T15:09:33.848Z",
+    "endedAt": "2026-03-20T15:09:35.449Z",
+    "hours": 0
+  },
+  {
+    "id": "s1",
+    "dev": "Michael",
+    "ai": "Claude",
+    "startTime": "2026-03-20T10:00:00",
+    "endTime": "2026-03-20T14:00:00",
+    "duration": "4h",
+    "stories": [
+      "BP-001",
+      "BP-002",
+      "BP-003",
+      "BP-004",
+      "BP-005",
+      "BP-006",
+      "BP-007",
+      "BP-008"
+    ],
+    "notes": "Setup inicial: diseño editorial, PWA, rutas separadas, panel barbero con horarios, panel admin, documentación y estructura ágil"
+  }
+]

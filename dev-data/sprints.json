@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "Sprint 1 - Fundación & PWA",
+    "startDate": "2026-03-20",
+    "endDate": "2026-04-03",
+    "goal": "Establecer la base del proyecto: PWA funcional, diseño editorial implementado, rutas separadas (cliente/barbero/admin) y estructura ágil completa",
+    "status": "active"
+  },
+  {
+    "id": 2,
+    "name": "Sprint 2 - Backend & Auth",
+    "startDate": "2026-04-03",
+    "endDate": "2026-04-17",
+    "goal": "Integrar backend (Supabase/API), autenticación real, persistencia de reservas y protección de rutas por rol",
+    "status": "planning"
+  },
+  {
+    "id": 3,
+    "name": "Sprint 3 - Features Avanzados",
+    "startDate": "2026-04-17",
+    "endDate": "2026-05-01",
+    "goal": "Notificaciones WhatsApp, sistema de pagos/suscripciones, reportes avanzados y deploy a producción",
+    "status": "planning"
+  }
+]

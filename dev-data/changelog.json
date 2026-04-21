@@ -1,0 +1,19 @@
+[
+  {
+    "id": "1",
+    "version": "0.1.0",
+    "date": "2026-03-20",
+    "changes": [
+      "Setup inicial con Next.js 16 + React 19 + Tailwind CSS 4",
+      "Diseño editorial minimalista (Playfair Display + Geist + paleta ink/gold)",
+      "Flujo de reserva completo (3 pasos: servicio → fecha/hora → datos)",
+      "PWA configurada (manifest, service worker, iconos, instalable)",
+      "Rutas separadas: / (cliente), /barbero, /admin",
+      "Panel del barbero con citas y gestión de horario/horas extra",
+      "Panel admin SaaS con métricas, tabla y búsqueda",
+      "Estructura ágil Scrum (dev-data/, CLAUDE.md, sprints, stories)",
+      "Documentación completa del proyecto"
+    ],
+    "author": "Michael"
+  }
+]

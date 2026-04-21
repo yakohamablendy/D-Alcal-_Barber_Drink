@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next:*)",
+      "Bash(node scripts/generate-icons.js)",
+      "Bash(find 'D:/Systems ACM/pharmaflow-pro/frontend/src/app/dev-portal' -type f -name *.tsx -o -name *.ts)"
+    ]
+  }
+}
